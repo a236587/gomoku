@@ -1,5 +1,8 @@
 # 五子棋 · 双人同屏（单文件零依赖）
 
+> 在线试玩：**https://a236587.github.io/gomoku/**
+> 源码仓库：https://github.com/a236587/gomoku
+
 `index.html` 就是完整游戏：HTML + CSS + JavaScript 全部内联，没有任何第三方库、构建工具或网络请求。
 
 另外附带两个**可选**的小工具，只用来把本目录共享给手机，不参与游戏运行：
