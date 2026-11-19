@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e2014">
+<meta name="description" content="零依赖单文件五子棋：双人同屏、悔棋、四套皮肤、五连高亮，支持手机触屏与局域网访问。">
+<title>五子棋 · 双人同屏</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e8b164'/%3E%3Cg stroke='%23503a1e' stroke-width='1.3'%3E%3Cpath d='M8 8h16M8 16h16M8 24h16M8 8v16M16 8v16M24 8v16'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4.2' fill='%23111418'/%3E%3C/svg%3E">
+<style>
+/* ===== 基础 ===== */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--page-bg);
+  background-attachment: fixed;
+  color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .3s ease;
+}
+
+#app {
+  width: 100%;
+  max-width: 1080px;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  padding: clamp(8px, 2vmin, 22px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.6vmin, 14px);
+}
+
+/* ===== 顶部状态栏 ===== */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: clamp(8px, 1.5vmin, 13px) clamp(12px, 2.2vmin, 20px);
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: .6em;
+  font-size: clamp(15px, 2.4vmin, 20px);
+  font-weight: 700;
+  letter-spacing: .03em;
+  min-width: 0;
+}
+
+.turn-dot {
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  background: var(--stone-black);
+  border: 1px solid var(--dot-border);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .35);
+  transition: background .2s ease, opacity .2s ease;
+}
+
+.turn-dot.white { background: var(--stone-white); }
+.turn-dot.gone { opacity: 0; }
+
+.meta {
+  flex: none;
+  font-size: clamp(12px, 1.7vmin, 14px);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ===== 棋盘区域 ===== */
+.board-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+canvas {
+  display: block;
+  border-radius: clamp(10px, 1.6vmin, 18px);
+  box-shadow: var(--board-shadow);
+  touch-action: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.result-banner {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: clamp(6px, 1.2vmin, 10px) clamp(18px, 3.4vmin, 30px);
+  border-radius: 999px;
+  font-size: clamp(14px, 2.4vmin, 20px);
+  font-weight: 800;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  color: var(--banner-text);
+  background: var(--banner-bg);
+  box-shadow: var(--banner-shadow);
+  animation: banner-pop .3s cubic-bezier(.2, 1.4, .4, 1);
+}
+
+.result-banner[hidden] { display: none; }
+
+@keyframes banner-pop {
+  from { opacity: 0; transform: translateY(-8px) scale(.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* ===== 底部工具栏 ===== */
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.2vmin, 10px);
+  padding: clamp(8px, 1.5vmin, 13px);
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.action-group,
+.theme-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.2vmin, 10px);
+}
+
+.btn {
+  font: inherit;
+  font-size: clamp(13px, 1.8vmin, 15px);
+  font-weight: 600;
+  color: var(--btn-text);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  border-radius: 10px;
+  padding: clamp(8px, 1.3vmin, 11px) clamp(14px, 2.4vmin, 22px);
+  cursor: pointer;
+  touch-action: manipulation;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .18s ease, border-color .18s ease, transform .06s ease, opacity .18s ease, box-shadow .18s ease;
+}
+
+.btn:hover:not(:disabled) { background: var(--btn-bg-hover); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45em;
+  padding: clamp(6px, 1.1vmin, 9px) clamp(10px, 1.8vmin, 14px);
+  font-size: clamp(12px, 1.6vmin, 14px);
+  border-radius: 999px;
+}
+
+.theme-btn::before {
+  content: "";
+  flex: none;
+  width: .9em;
+  height: .9em;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .22);
+}
+
+.theme-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.theme-btn[data-theme-btn="wood"]    { --swatch: linear-gradient(135deg, #f4d7a6, #c98a46); }
+.theme-btn[data-theme-btn="minimal"] { --swatch: linear-gradient(135deg, #ffffff, #d7dde8); }
+.theme-btn[data-theme-btn="dark"]    { --swatch: linear-gradient(135deg, #4a5a74, #0a0f18); }
+.theme-btn[data-theme-btn="go"]      { --swatch: linear-gradient(135deg, #f7e6bd, #cf9d5c); }
+/* ===== 皮肤一：木纹（默认） ===== */
+body[data-theme="wood"] {
+  --page-bg: radial-gradient(120% 90% at 50% 0%, #5b4029 0%, #2e2014 55%, #1b1208 100%);
+  --text: #f7ecdb;
+  --muted: #c8b295;
+  --panel: rgba(56, 38, 22, .62);
+  --panel-border: rgba(255, 220, 170, .18);
+  --panel-shadow: 0 14px 34px rgba(0, 0, 0, .32);
+  --btn-bg: rgba(255, 236, 205, .09);
+  --btn-bg-hover: rgba(255, 236, 205, .17);
+  --btn-border: rgba(255, 220, 170, .24);
+  --btn-text: #fbeedb;
+  --accent: #e8b164;
+  --accent-soft: rgba(232, 177, 100, .18);
+  --board-shadow: 0 18px 44px rgba(0, 0, 0, .42), 0 0 0 1px rgba(255, 226, 180, .14);
+  --stone-black: radial-gradient(circle at 35% 30%, #6f7276, #08090b);
+  --stone-white: radial-gradient(circle at 35% 30%, #ffffff, #cfc5b2);
+  --dot-border: rgba(255, 255, 255, .45);
+  --banner-bg: linear-gradient(135deg, #f8d089, #dd9a3d);
+  --banner-text: #29190a;
+  --banner-shadow: 0 14px 30px rgba(0, 0, 0, .35);
+}
+
+/* ===== 皮肤二：简约白 ===== */
+body[data-theme="minimal"] {
+  --page-bg: linear-gradient(160deg, #f9fafc 0%, #edf0f5 55%, #e1e6ef 100%);
+  --text: #222834;
+  --muted: #6f7787;
+  --panel: rgba(255, 255, 255, .84);
+  --panel-border: rgba(30, 45, 75, .09);
+  --panel-shadow: 0 12px 28px rgba(40, 60, 95, .10);
+  --btn-bg: #ffffff;
+  --btn-bg-hover: #f1f4f9;
+  --btn-border: rgba(30, 45, 75, .16);
+  --btn-text: #242b38;
+  --accent: #3b6ef5;
+  --accent-soft: rgba(59, 110, 245, .12);
+  --board-shadow: 0 16px 36px rgba(40, 60, 95, .16), 0 0 0 1px rgba(30, 45, 75, .08);
+  --stone-black: radial-gradient(circle at 35% 30%, #6b7280, #0a0c10);
+  --stone-white: radial-gradient(circle at 35% 30%, #ffffff, #e2e6ee);
+  --dot-border: rgba(0, 0, 0, .3);
+  --banner-bg: linear-gradient(135deg, #e3ebff, #b8caff);
+  --banner-text: #15224c;
+  --banner-shadow: 0 14px 30px rgba(50, 80, 150, .25);
+}
+/* ===== 皮肤三：暗夜 ===== */
+body[data-theme="dark"] {
+  --page-bg: radial-gradient(120% 90% at 50% 0%, #1d2942 0%, #0c1119 60%, #070a10 100%);
+  --text: #e8f0fb;
+  --muted: #93a3bd;
+  --panel: rgba(23, 32, 47, .78);
+  --panel-border: rgba(120, 170, 255, .18);
+  --panel-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+  --btn-bg: rgba(120, 170, 255, .10);
+  --btn-bg-hover: rgba(120, 170, 255, .20);
+  --btn-border: rgba(120, 170, 255, .28);
+  --btn-text: #dce8fb;
+  --accent: #6ea8ff;
+  --accent-soft: rgba(110, 168, 255, .18);
+  --board-shadow: 0 18px 44px rgba(0, 0, 0, .60), 0 0 0 1px rgba(120, 170, 255, .16);
+  --stone-black: radial-gradient(circle at 35% 30%, #566174, #05070b);
+  --stone-white: radial-gradient(circle at 35% 30%, #ffffff, #c4d4ea);
+  --dot-border: rgba(160, 200, 255, .55);
+  --banner-bg: linear-gradient(135deg, #2b4a7a, #16294a);
+  --banner-text: #d9e8ff;
+  --banner-shadow: 0 14px 34px rgba(0, 0, 0, .5);
+}
+
+/* ===== 皮肤四：围棋盘 ===== */
+body[data-theme="go"] {
+  --page-bg: radial-gradient(120% 90% at 50% 0%, #6d4b26 0%, #3b2713 55%, #221507 100%);
+  --text: #f8eeda;
+  --muted: #cfb590;
+  --panel: rgba(56, 36, 16, .66);
+  --panel-border: rgba(255, 225, 175, .18);
+  --panel-shadow: 0 14px 34px rgba(0, 0, 0, .34);
+  --btn-bg: rgba(255, 240, 210, .10);
+  --btn-bg-hover: rgba(255, 240, 210, .18);
+  --btn-border: rgba(255, 225, 175, .24);
+  --btn-text: #fbf0dc;
+  --accent: #d99a4f;
+  --accent-soft: rgba(217, 154, 79, .20);
+  --board-shadow: 0 18px 44px rgba(0, 0, 0, .44), 0 0 0 1px rgba(60, 38, 12, .5);
+  --stone-black: radial-gradient(circle at 35% 30%, #6d6d6d, #000000);
+  --stone-white: radial-gradient(circle at 35% 30%, #ffffff, #d8cebb);
+  --dot-border: rgba(255, 255, 255, .45);
+  --banner-bg: linear-gradient(135deg, #f4d59c, #d99f5b);
+  --banner-text: #2b1a07;
+  --banner-shadow: 0 14px 30px rgba(0, 0, 0, .36);
+}
+/* ===== 响应式：宽屏把工具栏铺开 ===== */
+@media (min-width: 620px) {
+  .toolbar {
+    justify-content: space-between;
+    padding-inline: clamp(12px, 2.2vmin, 20px);
+  }
+}
+
+/* ===== 响应式：手机横屏 / 窗口很矮时改为左右分栏，棋盘占满高度 ===== */
+@media (orientation: landscape) and (max-height: 560px) {
+  #app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(168px, 24vw);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "board top"
+      "board tools";
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .topbar {
+    grid-area: top;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 12px;
+    border-radius: 12px;
+  }
+
+  .status { font-size: 15px; }
+
+  .board-wrap { grid-area: board; }
+
+  .toolbar {
+    grid-area: tools;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 12px;
+    overflow-y: auto;
+  }
+
+  .action-group,
+  .theme-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .btn {
+    padding: 8px 10px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .theme-btn { justify-content: center; }
+
+  /* 横屏矮窗口空间有限：结算只用顶部状态栏显示，避免挤占棋盘 */
+  .result-banner { display: none; }
+}
+
+/* ===== 降低动态效果偏好 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+</style>
+</head>
+<body data-theme="wood">
+<div id="app">
+  <header class="topbar">
+    <div class="status">
+      <span class="turn-dot" id="turnDot" aria-hidden="true"></span>
+      <span id="statusText" aria-live="polite">黑方回合</span>
+    </div>
+    <div class="meta" id="moveCount">第 0 手</div>
+  </header>
+
+  <div class="result-banner" id="resultBanner" hidden></div>
+
+  <main class="board-wrap" id="boardWrap">
+    <canvas id="board" width="600" height="600" role="img" aria-label="十五路五子棋棋盘，点击交叉点落子"></canvas>
+  </main>
+
+  <footer class="toolbar">
+    <div class="action-group">
+      <button type="button" class="btn" id="undoBtn" disabled>悔棋</button>
+      <button type="button" class="btn" id="restartBtn">重新开始</button>
+    </div>
+    <div class="theme-group" role="group" aria-label="棋盘样式（整体换肤）">
+      <button type="button" class="btn theme-btn" data-theme-btn="wood" aria-pressed="true">木纹</button>
+      <button type="button" class="btn theme-btn" data-theme-btn="minimal" aria-pressed="false">简约白</button>
+      <button type="button" class="btn theme-btn" data-theme-btn="dark" aria-pressed="false">暗夜</button>
+      <button type="button" class="btn theme-btn" data-theme-btn="go" aria-pressed="false">围棋盘</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===================== 规则常量 ===================== */
+  var SIZE = 15;                 // 15 路棋盘
+  var EMPTY = 0, BLACK = 1, WHITE = 2;
+  var STARS = [[3, 3], [3, 11], [7, 7], [11, 3], [11, 11]];  // 天元与星位
+  var DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];              // 横 / 竖 / 两条斜线
+
+  /* ===================== 四套皮肤的 Canvas 配色 ===================== */
+  var THEMES = {
+    wood: {
+      boardFrom: '#f4d7a6', boardTo: '#d09b55', diagonal: true,
+      grain: '#8b5a24', grainAlpha: 0.07, borderScale: 1,
+      line: 'rgba(84, 52, 20, .60)', border: 'rgba(74, 45, 16, .80)', star: 'rgba(70, 42, 14, .85)',
+      shadow: 'rgba(70, 42, 10, .45)',
+      blackFrom: '#727579', blackMid: '#1c1f24', blackTo: '#050506',
+      blackEdge: 'rgba(255, 255, 255, .10)', blackSpec: 'rgba(255, 255, 255, .22)',
+      whiteFrom: '#ffffff', whiteMid: '#f4f0e7', whiteTo: '#cdc3b1',
+      whiteEdge: 'rgba(120, 100, 70, .55)', whiteSpec: 'rgba(255, 255, 255, .85)',
+      markOnBlack: '#ffd479', markOnWhite: '#b8342a',
+      winLine: 'rgba(255, 196, 64, .90)', winGlow: 'rgba(255, 170, 40, .90)', winRing: '#ffcf6a'
+    },
+    minimal: {
+      boardFrom: '#ffffff', boardTo: '#eef1f6', diagonal: false,
+      grain: '#000000', grainAlpha: 0, borderScale: 1,
+      line: 'rgba(74, 88, 112, .32)', border: 'rgba(64, 78, 102, .52)', star: 'rgba(64, 78, 102, .55)',
+      shadow: 'rgba(40, 55, 85, .22)',
+      blackFrom: '#6a7280', blackMid: '#22262e', blackTo: '#0a0c10',
+      blackEdge: 'rgba(255, 255, 255, .10)', blackSpec: 'rgba(255, 255, 255, .25)',
+      whiteFrom: '#ffffff', whiteMid: '#fafbfd', whiteTo: '#dde2ec',
+      whiteEdge: 'rgba(100, 115, 140, .45)', whiteSpec: 'rgba(255, 255, 255, .90)',
+      markOnBlack: '#4b7bf7', markOnWhite: '#2f5fe0',
+      winLine: 'rgba(59, 110, 245, .80)', winGlow: 'rgba(59, 110, 245, .55)', winRing: '#3b6ef5'
+    },
+    dark: {
+      boardFrom: '#283349', boardTo: '#111724', diagonal: false,
+      grain: '#000000', grainAlpha: 0, borderScale: 1,
+      line: 'rgba(132, 168, 224, .26)', border: 'rgba(132, 168, 224, .50)', star: 'rgba(150, 190, 240, .65)',
+      shadow: 'rgba(0, 0, 0, .60)',
+      blackFrom: '#59677f', blackMid: '#151c28', blackTo: '#03060b',
+      blackEdge: 'rgba(140, 190, 255, .22)', blackSpec: 'rgba(160, 205, 255, .28)',
+      whiteFrom: '#ffffff', whiteMid: '#e8f1ff', whiteTo: '#b9cbe4',
+      whiteEdge: 'rgba(150, 190, 235, .60)', whiteSpec: 'rgba(255, 255, 255, .90)',
+      markOnBlack: '#7fd8ff', markOnWhite: '#1e88e5',
+      winLine: 'rgba(110, 205, 255, .90)', winGlow: 'rgba(90, 190, 255, .85)', winRing: '#8fe3ff'
+    },
+    go: {
+      boardFrom: '#f7e6bd', boardTo: '#ddb982', diagonal: true,
+      grain: '#7a5220', grainAlpha: 0.09, borderScale: 1.8,
+      line: 'rgba(58, 36, 12, .72)', border: 'rgba(48, 29, 8, .90)', star: 'rgba(48, 29, 8, .90)',
+      shadow: 'rgba(80, 50, 15, .45)',
+      blackFrom: '#6b6b6b', blackMid: '#191919', blackTo: '#000000',
+      blackEdge: 'rgba(255, 255, 255, .07)', blackSpec: 'rgba(255, 255, 255, .18)',
+      whiteFrom: '#ffffff', whiteMid: '#f7f2e7', whiteTo: '#d6cbb6',
+      whiteEdge: 'rgba(110, 85, 45, .50)', whiteSpec: 'rgba(255, 255, 255, .85)',
+      markOnBlack: '#ffd166', markOnWhite: '#b3261e',
+      winLine: 'rgba(214, 69, 60, .85)', winGlow: 'rgba(230, 90, 70, .75)', winRing: '#e0503f'
+    }
+  };
+
+  /* ===================== DOM 引用 ===================== */
+  var canvas = document.getElementById('board');
+  var ctx = canvas.getContext('2d');
+  var boardWrap = document.getElementById('boardWrap');
+  var statusTextEl = document.getElementById('statusText');
+  var turnDotEl = document.getElementById('turnDot');
+  var moveCountEl = document.getElementById('moveCount');
+  var undoBtn = document.getElementById('undoBtn');
+  var restartBtn = document.getElementById('restartBtn');
+  var bannerEl = document.getElementById('resultBanner');
+  var themeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-theme-btn]'));
+
+  /* ===================== 游戏状态 ===================== */
+  var board = new Array(SIZE * SIZE).fill(EMPTY); // 下标 = r * SIZE + c
+  var moves = [];          // 落子历史：{ r, c, player }
+  var current = BLACK;     // 当前该谁落子（黑先）
+  var winner = EMPTY;      // 0 = 未结束，1 = 黑胜，2 = 白胜
+  var isDraw = false;      // 是否平局（棋盘填满）
+  var winLine = [];        // 获胜的连续棋子坐标
+  var lastMove = null;     // 最后一步（画小标记）
+  var hover = null;        // 鼠标悬停预览
+  var theme = 'wood';
+
+  /* ===================== 尺寸（CSS 像素 / 高清屏） ===================== */
+  var cssSize = 0;   // 棋盘 CSS 边长
+  var gap = 0;       // 相邻交叉点间距（也等于棋盘留白）
+  var radius = 0;    // 棋子半径
+  var dpr = 1;
+
+  function idx(r, c) { return r * SIZE + c; }
+  function inBounds(r, c) { return r >= 0 && r < SIZE && c >= 0 && c < SIZE; }
+  function cellCenter(r, c) { return { x: gap + c * gap, y: gap + r * gap }; }
+  /* ===================== 绘制：底板 ===================== */
+  function paintBoard(t) {
+    if (t.diagonal) {
+      var lg = ctx.createLinearGradient(0, 0, cssSize, cssSize);
+      lg.addColorStop(0, t.boardFrom);
+      lg.addColorStop(1, t.boardTo);
+      ctx.fillStyle = lg;
+    } else {
+      var rg = ctx.createRadialGradient(
+        cssSize * 0.32, cssSize * 0.16, cssSize * 0.04,
+        cssSize * 0.5, cssSize * 0.55, cssSize * 0.92
+      );
+      rg.addColorStop(0, t.boardFrom);
+      rg.addColorStop(1, t.boardTo);
+      ctx.fillStyle = rg;
+    }
+    ctx.fillRect(0, 0, cssSize, cssSize);
+
+    // 木纹 / 竹纹肌理（只有木系皮肤绘制）
+    if (t.grainAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = t.grainAlpha;
+      ctx.strokeStyle = t.grain;
+      ctx.lineWidth = Math.max(1, cssSize * 0.006);
+      var rows = 16, steps = 8, i, s, x, y;
+      for (i = 0; i < rows; i++) {
+        var baseY = cssSize * (i + 0.5) / rows;
+        ctx.beginPath();
+        ctx.moveTo(-cssSize * 0.05, baseY);
+        for (s = 1; s <= steps; s++) {
+          x = -cssSize * 0.05 + cssSize * 1.1 * (s / steps);
+          y = baseY + Math.sin(s * 0.9 + i * 1.7) * cssSize * 0.012;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ===================== 绘制：网格 ===================== */
+  function paintGrid(t) {
+    var start = gap;
+    var end = cssSize - gap;
+    var i, p;
+
+    ctx.save();
+    ctx.strokeStyle = t.line;
+    ctx.lineWidth = Math.max(1, cssSize / 640);
+    ctx.beginPath();
+    for (i = 0; i < SIZE; i++) {
+      p = gap + i * gap;
+      ctx.moveTo(start, p);
+      ctx.lineTo(end, p);
+      ctx.moveTo(p, start);
+      ctx.lineTo(p, end);
+    }
+    ctx.stroke();
+
+    // 外框加粗
+    ctx.strokeStyle = t.border;
+    ctx.lineWidth = Math.max(1.6, cssSize / 300) * (t.borderScale || 1);
+    ctx.strokeRect(start, start, end - start, end - start);
+
+    // 星位
+    ctx.fillStyle = t.star;
+    var sr = Math.max(1.8, gap * 0.1) * (t.borderScale > 1 ? 1.2 : 1);
+    for (i = 0; i < STARS.length; i++) {
+      p = STARS[i];
+      ctx.beginPath();
+      ctx.arc(gap + p[1] * gap, gap + p[0] * gap, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  /* ===================== 绘制：棋子 ===================== */
+  function paintStone(r, c, player, alpha) {
+    var t = THEMES[theme];
+    var pos = cellCenter(r, c);
+    var x = pos.x, y = pos.y, rad = radius;
+    var a = (typeof alpha === 'number') ? alpha : 1;
+    var grad, isBlack = (player === BLACK);
+
+    // 棋身（带投影的径向渐变，模拟立体棋子）
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.shadowColor = t.shadow;
+    ctx.shadowBlur = rad * 0.55;
+    ctx.shadowOffsetY = rad * 0.12;
+
+    grad = ctx.createRadialGradient(
+      x - rad * 0.32, y - rad * 0.36, rad * 0.08,
+      x, y, rad * 1.06
+    );
+    if (isBlack) {
+      grad.addColorStop(0, t.blackFrom);
+      grad.addColorStop(0.62, t.blackMid);
+      grad.addColorStop(1, t.blackTo);
+    } else {
+      grad.addColorStop(0, t.whiteFrom);
+      grad.addColorStop(0.70, t.whiteMid);
+      grad.addColorStop(1, t.whiteTo);
+    }
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+
+    // 描边与高光
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.5, rad - Math.max(0.6, rad * 0.05)), 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(0.8, rad * 0.07);
+    ctx.strokeStyle = isBlack ? t.blackEdge : t.whiteEdge;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(
+      x - rad * 0.30, y - rad * 0.34,
+      rad * 0.30, rad * 0.19, -Math.PI / 4, 0, Math.PI * 2
+    );
+    ctx.fillStyle = isBlack ? t.blackSpec : t.whiteSpec;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ===================== 绘制：获胜连线与标记 ===================== */
+  function paintWinLine(t) {
+    if (winLine.length < 2) return;
+    var a = cellCenter(winLine[0].r, winLine[0].c);
+    var b = cellCenter(winLine[winLine.length - 1].r, winLine[winLine.length - 1].c);
+
+    ctx.save();
+    ctx.strokeStyle = t.winLine;
+    ctx.lineWidth = Math.max(4, radius * 0.9);
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.55;
+    ctx.shadowColor = t.winGlow;
+    ctx.shadowBlur = radius * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 棋子之上的细高亮线，保证“连线”一眼可见
+  function paintWinStroke(t) {
+    if (winLine.length < 2) return;
+    var a = cellCenter(winLine[0].r, winLine[0].c);
+    var b = cellCenter(winLine[winLine.length - 1].r, winLine[winLine.length - 1].c);
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ex = dx / len * radius * 0.85;
+    var ey = dy / len * radius * 0.85;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = t.winRing;
+    ctx.lineWidth = Math.max(2, radius * 0.16);
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = t.winGlow;
+    ctx.shadowBlur = radius * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(a.x - ex, a.y - ey);
+    ctx.lineTo(b.x + ex, b.y + ey);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function paintWinRings(t) {
+    var i, p, pos;
+    ctx.save();
+    ctx.strokeStyle = t.winRing;
+    ctx.lineWidth = Math.max(2, radius * 0.2);
+    ctx.shadowColor = t.winGlow;
+    ctx.shadowBlur = radius * 0.8;
+    for (i = 0; i < winLine.length; i++) {
+      p = winLine[i];
+      pos = cellCenter(p.r, p.c);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius * 1.16, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function paintLastMarker(t) {
+    if (!lastMove) return;
+    var pos = cellCenter(lastMove.r, lastMove.c);
+    var owner = board[idx(lastMove.r, lastMove.c)];
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, Math.max(1.6, radius * 0.2), 0, Math.PI * 2);
+    ctx.fillStyle = (owner === BLACK) ? t.markOnBlack : t.markOnWhite;
+    ctx.fill();
+    ctx.restore();
+  }
+  /* ===================== 整盘重绘 ===================== */
+  function render() {
+    if (!cssSize) return;
+    var t = THEMES[theme];
+    var r, c, p;
+
+    ctx.clearRect(0, 0, cssSize, cssSize);
+    paintBoard(t);
+    paintGrid(t);
+
+    // 连线画在棋子下面，看起来像一条线串起五子
+    if (winLine.length) paintWinLine(t);
+
+    for (r = 0; r < SIZE; r++) {
+      for (c = 0; c < SIZE; c++) {
+        p = board[idx(r, c)];
+        if (p !== EMPTY) paintStone(r, c, p);
+      }
+    }
+
+    if (winLine.length) {
+      paintWinStroke(t);
+      paintWinRings(t);
+    }
+    paintLastMarker(t);
+
+    if (hover && !winner && !isDraw && board[idx(hover.r, hover.c)] === EMPTY) {
+      paintStone(hover.r, hover.c, current, 0.32);   // 悬停虚影预览
+    }
+  }
+
+  /* ===================== 自适应尺寸 + 高清屏 ===================== */
+  function resize() {
+    var rect = boardWrap.getBoundingClientRect();
+    var w = rect.width;
+    var h = rect.height;
+    if (!(w > 0) || !(h > 0)) return;
+
+    var nextSize = Math.max(1, Math.floor(Math.min(w, h)));
+    var nextDpr = Math.min(window.devicePixelRatio || 1, 3);
+    if (nextSize === cssSize && nextDpr === dpr) return;   // 尺寸没变就不重绘
+
+    cssSize = nextSize;
+    dpr = nextDpr;
+    gap = cssSize / (SIZE + 1);       // 15 路：留白 = 线距，棋盘看起来更透气
+    radius = gap * 0.44;
+
+    canvas.style.width = cssSize + 'px';
+    canvas.style.height = cssSize + 'px';
+    canvas.width = Math.round(cssSize * dpr);
+    canvas.height = Math.round(cssSize * dpr);
+
+    // 用缩放矩阵把逻辑坐标固定为 CSS 像素，物理像素由 dpr 决定 → 高清屏不发虚
+    ctx.setTransform(canvas.width / cssSize, 0, 0, canvas.height / cssSize, 0, 0);
+    render();
+  }
+
+  /* ===================== 指针坐标 → 最近交叉点 ===================== */
+  function pointToCell(clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height || !cssSize) return null;
+
+    var x = (clientX - rect.left) * (cssSize / rect.width);
+    var y = (clientY - rect.top) * (cssSize / rect.height);
+    var c = Math.round((x - gap) / gap);
+    var r = Math.round((y - gap) / gap);
+    if (!inBounds(r, c)) return null;
+
+    var cx = gap + c * gap;
+    var cy = gap + r * gap;
+    var dist = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+    if (dist > gap * 0.72) return null;   // 离交叉点太远，忽略误触
+    return { r: r, c: c };
+  }
+
+  /* ===================== 胜负判定（无禁手，五连及以上） ===================== */
+  function findWinLine(r, c, player) {
+    var d, i, rr, cc, line;
+
+    for (d = 0; d < DIRS.length; d++) {
+      var dr = DIRS[d][0];
+      var dc = DIRS[d][1];
+      line = [{ r: r, c: c }];
+
+      // 正方向
+      for (i = 1; i < SIZE; i++) {
+        rr = r + dr * i;
+        cc = c + dc * i;
+        if (!inBounds(rr, cc) || board[idx(rr, cc)] !== player) break;
+        line.push({ r: rr, c: cc });
+      }
+      // 反方向
+      for (i = 1; i < SIZE; i++) {
+        rr = r - dr * i;
+        cc = c - dc * i;
+        if (!inBounds(rr, cc) || board[idx(rr, cc)] !== player) break;
+        line.unshift({ r: rr, c: cc });
+      }
+
+      if (line.length >= 5) return line;   // 长连同样算赢
+    }
+    return null;
+  }
+  /* ===================== 核心操作：落子 / 悔棋 / 重开 ===================== */
+  function place(r, c) {
+    if (winner || isDraw) return;                 // 已分胜负，停止落子
+    if (!inBounds(r, c)) return;
+    if (board[idx(r, c)] !== EMPTY) return;       // 已落子的位置不能重复落子
+
+    board[idx(r, c)] = current;
+    moves.push({ r: r, c: c, player: current });
+    lastMove = moves[moves.length - 1];
+    hover = null;
+
+    var line = findWinLine(r, c, current);
+    if (line) {
+      winner = current;
+      winLine = line;
+    } else if (moves.length === SIZE * SIZE) {
+      isDraw = true;                              // 棋盘填满且无人五连
+    } else {
+      current = (current === BLACK) ? WHITE : BLACK;
+    }
+
+    render();
+    updateUI();
+  }
+
+  function undo() {
+    if (!moves.length) return;
+    var last = moves.pop();
+    board[idx(last.r, last.c)] = EMPTY;
+
+    current = last.player;                        // 回合还给被撤销的落子方
+    winner = EMPTY;
+    isDraw = false;
+    winLine = [];
+    lastMove = moves.length ? moves[moves.length - 1] : null;
+    hover = null;
+
+    render();
+    updateUI();
+  }
+
+  function restart() {
+    board.fill(EMPTY);
+    moves.length = 0;
+    current = BLACK;
+    winner = EMPTY;
+    isDraw = false;
+    winLine = [];
+    lastMove = null;
+    hover = null;
+
+    render();
+    updateUI();
+  }
+
+  /* ===================== 顶部状态与按钮状态 ===================== */
+  function updateUI() {
+    var text, dotClass = 'turn-dot', over = !!(winner || isDraw);
+
+    if (winner) {
+      text = (winner === BLACK ? '黑方' : '白方') + '获胜';
+      if (winner === WHITE) dotClass += ' white';
+    } else if (isDraw) {
+      text = '平局';
+      dotClass += ' gone';
+    } else {
+      text = (current === BLACK ? '黑方' : '白方') + '回合';
+      if (current === WHITE) dotClass += ' white';
+    }
+
+    statusTextEl.textContent = text;
+    turnDotEl.className = dotClass;
+    moveCountEl.textContent = '第 ' + moves.length + ' 手';
+    undoBtn.disabled = (moves.length === 0);      // 空棋盘时置灰不可用
+
+    if (over) {
+      bannerEl.textContent = text;
+      bannerEl.hidden = false;
+    } else {
+      bannerEl.hidden = true;
+      bannerEl.textContent = '';
+    }
+  }
+  /* ===================== 换肤（棋盘 + 棋子 + 页面整体） ===================== */
+  var THEME_COLORS = { wood: '#3a2a19', minimal: '#eef1f6', dark: '#0c1119', go: '#4a3018' };
+
+  function applyTheme(name, persist) {
+    if (!THEMES[name]) name = 'wood';
+    theme = name;
+    document.body.setAttribute('data-theme', name);
+
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLORS[name] || '#000000');
+
+    themeButtons.forEach(function (btn) {
+      var on = btn.getAttribute('data-theme-btn') === name;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+
+    if (persist !== false) {
+      try { window.localStorage.setItem('gomoku.theme', name); } catch (err) { /* 隐私模式下忽略 */ }
+    }
+    render();
+  }
+
+  /* ===================== 指针交互：鼠标点击 + 手机触屏 ===================== */
+  function onPointerDown(e) {
+    if (e.pointerType === 'mouse' && typeof e.button === 'number' && e.button !== 0) return;
+    e.preventDefault();                       // 避免双指缩放 / 拖拽选中
+    var cell = pointToCell(e.clientX, e.clientY);
+    if (cell) place(cell.r, cell.c);
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+
+  var hoverFrame = 0;
+  function scheduleHoverRender() {
+    if (hoverFrame) return;
+    hoverFrame = window.requestAnimationFrame(function () {
+      hoverFrame = 0;
+      render();
+    });
+  }
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (e.pointerType && e.pointerType !== 'mouse') return;   // 触屏不做悬停
+    var cell = pointToCell(e.clientX, e.clientY);
+    if (!cell && !hover) return;
+    if (cell && hover && cell.r === hover.r && cell.c === hover.c) return;
+    hover = cell;
+    scheduleHoverRender();
+  });
+
+  canvas.addEventListener('pointerleave', function () {
+    if (hover) { hover = null; render(); }
+  });
+
+  canvas.addEventListener('pointercancel', function () {
+    if (hover) { hover = null; render(); }
+  });
+
+  /* ===================== 按钮与快捷键 ===================== */
+  undoBtn.addEventListener('click', undo);
+  restartBtn.addEventListener('click', restart);
+
+  themeButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyTheme(btn.getAttribute('data-theme-btn'));
+    });
+  });
+
+  window.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      undo();                                 // 电脑端可用 Ctrl/Cmd + Z 悔棋
+    }
+  });
+
+  /* ===================== 尺寸监听 ===================== */
+  var resizeFrame = 0;
+  function scheduleResize() {
+    if (resizeFrame) return;
+    resizeFrame = window.requestAnimationFrame(function () {
+      resizeFrame = 0;
+      resize();
+    });
+  }
+
+  if (typeof window.ResizeObserver === 'function') {
+    new window.ResizeObserver(scheduleResize).observe(boardWrap);
+  }
+  window.addEventListener('resize', scheduleResize);
+  window.addEventListener('orientationchange', function () {
+    window.setTimeout(resize, 150);           // 手机横竖屏切换后再量一次
+  });
+
+  /* ===================== 启动 ===================== */
+  var savedTheme = null;
+  try { savedTheme = window.localStorage.getItem('gomoku.theme'); } catch (err) { savedTheme = null; }
+
+  applyTheme(savedTheme && THEMES[savedTheme] ? savedTheme : 'wood', false);
+  resize();
+  updateUI();
+})();
+
+</script>
+</body>
+</html>

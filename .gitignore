@@ -1,0 +1,6 @@
+# 仅排除本地私密/临时文件，游戏本体与文档照常发布
+五子棋-AI需求命令.md
+.codewhale/
+*.log
+_dom.html
+_dom.err
